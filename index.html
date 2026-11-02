@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jurnal PKL · SMK Negeri 7 Pinrang</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--hd:#05396f;--bg:#eef1f5;--ink:#1b2430;--mut:#5d6b7a;--ln:#d5dae0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+header{background:var(--hd);color:#fff;padding:12px 20px;display:flex;flex-wrap:wrap;gap:8px 28px;align-items:center}
+nav{display:flex;flex-wrap:wrap;gap:4px 20px}nav a{color:#ffd23f;cursor:pointer;font-weight:600;padding-bottom:2px;border-bottom:3px solid transparent}nav a.on{border-color:#ffd23f}
+main{max-width:1300px;margin:auto;padding:20px}h2{margin:0 0 10px;font-size:20px}
+.card,.ac{background:#fff;border:1px solid var(--ln);border-radius:10px;padding:16px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.sp{flex:1}.sub{color:var(--mut);font-size:13px}.err{color:#c0392b}
+label{display:block;font-size:13px;font-weight:600;margin:10px 0 3px}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--ln);border-radius:6px;font:inherit}
+.row input,.row select{width:auto}button{background:var(--hd);color:#fff;border:0;border-radius:6px;padding:8px 16px;cursor:pointer;font:inherit;margin-top:10px}
+button.g{background:none;color:var(--hd);border:1px solid var(--hd);margin:0}button.d{background:none;color:#c0392b;border:1px solid #c0392b;padding:3px 10px;margin:0}
+.lnk{color:#1a6fd0;cursor:pointer}.g3{display:flex;flex-wrap:wrap;gap:16px;justify-content:center}
+.ac{flex:0 1 calc((100% - 32px)/3);min-width:300px;margin:0;box-shadow:0 4px 14px rgba(5,57,111,.14)}
+.tag{color:#fff;border-radius:99px;padding:1px 10px;font-size:12px;font-weight:600}
+.ph{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ph img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;cursor:zoom-in}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border-bottom:1px solid var(--ln);padding:6px;text-align:left}
+details{border-bottom:1px solid var(--ln);padding:6px 0}summary{cursor:pointer}dl{display:grid;grid-template-columns:200px 1fr;gap:3px 12px;margin:8px 0}dt{color:var(--mut)}dd{margin:0}
+</style></head><body>
+<header><b>📒 e-Jurnal PKL · SMKN 7 Pinrang</b><nav id="nav"></nav></header><main id="m"></main>
+<script>
+// === ISI DUA BARIS INI (Supabase > Project Settings > API). Kunci publik (anon) aman ditaruh di sini. ===
+const SB_URL="ISI_PROJECT_URL", SB_KEY="ISI_ANON_KEY";
+const sb=supabase.createClient(SB_URL,SB_KEY), MAIL="@guru.jurnalpkl.id";
+const $=s=>document.querySelector(s), m=$("#m");
+const e=v=>String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const JENIS=["Orientasi","Monitoring kemajuan","Pembimbingan kemajuan","Pembimbingan kendala","Evaluasi jurnal/laporan PKL","Koordinasi dengan mitra","Evaluasi akhir","Lainnya"];
+const METODE=["Kunjungan langsung","Pertemuan di sekolah","Telepon","Video conference/rapat daring","Komunikasi tertulis","Koordinasi pembimbing dunia kerja","Evaluasi dokumen"];
+const STATUS=["Belum mulai","Proses","Selesai","Menunggu pihak lain","Tidak dilanjutkan"];
+const TXT=[["tujuan","Tujuan pembimbingan"],["materi","Materi/kompetensi dibahas"],["teknis","Perkembangan kompetensi teknis"],["soft","Soft skills/budaya kerja"],["disiplin","Kedisiplinan/kehadiran"],["k3","K3/keselamatan kerja"],["kendala","Kendala peserta didik"],["masukan","Masukan pembimbing dunia kerja"],["arahan","Arahan pembimbing sekolah"],["tindak","Kesepakatan tindak lanjut"],["catatan","Catatan tambahan"]];
+const BID=[[/NKN|NAUTIKA|KAPAL/i,"Nautika Kapal Niaga","#0b3d91"],[/DKV|DESAIN/i,"Desain Komunikasi Visual","#b3126b"],[/\bAP[A-Z]?\b|AGRI|PERIKANAN|IKAN/i,"Agribisnis Perikanan","#0b7a75"]];
+const bid=k=>BID.find(b=>b[0].test(k||""))||[0,"PKL","#05396f"];
+const opt=(a,ph)=>(ph?`<option value="">${ph}</option>`:"")+a.map(x=>`<option>${e(x)}</option>`).join("");
+const url=p=>sb.storage.from("foto").getPublicUrl(p).data.publicUrl;
+const tgl=d=>d?d.split("-").reverse().join("/"):"";
+let me=null,tab="publik",DOCS=[];
+
+async function init(){const{data:{session}}=await sb.auth.getSession();if(session)await load(session.user.id);show()}
+async function load(id){const{data}=await sb.from("profil").select("*").eq("id",id).maybeSingle();me=data}
+function nav(){
+  const t=[["publik","Aktivitas Siswa PKL"]];
+  if(!me)t.push(["login","Masuk"]);
+  else{t.push(["jurnal","Daftar Jurnal"]);
+    if(me.role==="guru")t.push(["isi","Isi Jurnal"],["pw","Ganti Password"]);
+    if(me.role==="admin")t.push(["impor","Impor Data"],["akun","Akun Guru"]);
+    t.push(["out","Keluar"])}
+  $("#nav").innerHTML=t.map(x=>`<a data-t="${x[0]}" class="${x[0]===tab?"on":""}">${x[1]}</a>`).join("");
+  $("#nav").querySelectorAll("a").forEach(a=>a.onclick=async()=>{if(a.dataset.t==="out"){await sb.auth.signOut();me=null;tab="publik"}else tab=a.dataset.t;show()});
+}
+async function show(){nav();await({publik:vPublik,login:vLogin,jurnal:vJurnal,isi:vIsi,pw:vPw,impor:vImpor,akun:vAkun}[tab])()}
+function lb(u){const o=document.createElement("div");o.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:9;cursor:zoom-out";o.innerHTML=`<img src="${e(u)}" alt="Foto" style="max-width:96vw;max-height:94vh">`;o.onclick=()=>o.remove();document.body.appendChild(o)}
+
+// ---------- HALAMAN PUBLIK ----------
+async function vPublik(){
+  m.innerHTML=`<div class="row"><h2>Aktivitas Siswa PKL</h2><span class="sp"></span><select id="pk"><option value="">Semua kelas</option></select><input type="date" id="pt"></div><div id="pl"></div>`;
+  const pk=$("#pk"),pt=$("#pt"),pl=$("#pl");let PG={};
+  const card=x=>{const b=bid(x.kelas),p=(x.foto||[]).map(url);return `<div class="ac" style="border-top:5px solid ${b[2]}"><b>${e(x.siswa)}</b> <span class="tag" style="background:${b[2]}">${b[1]}</span><div class="sub">Pembimbing: ${e(x.guru)}</div><p>${e(x.kegiatan)}</p>${p.length?`<div class="ph">${p.map((u,i)=>`<div style="padding:5px;border-radius:12px;background:${b[2]};${i===0&&p.length!==2?"grid-column:1/-1":""}"><img src="${e(u)}" alt="Foto kegiatan"></div>`).join("")}</div>`:""}</div>`};
+  async function draw(){
+    if(!pt.value){pl.innerHTML='<p class="sub">Pilih tanggal kegiatan.</p>';return}
+    const{data}=await sb.from("aktivitas_publik").select("*").eq("tgl",pt.value),all=data||[],sel=pk.value;
+    pk.innerHTML='<option value="">Semua kelas</option>'+[...new Set(all.map(x=>x.kelas))].sort().map(k=>`<option${k===sel?" selected":""}>${e(k)}</option>`).join("");
+    const r=all.filter(x=>!pk.value||x.kelas===pk.value),g={};r.forEach(x=>(g[x.kelas||"-"]=g[x.kelas||"-"]||[]).push(x));
+    pl.innerHTML=r.length?Object.keys(g).sort().map(c=>{const a=g[c],n=Math.ceil(a.length/8),p=Math.min(PG[c]||0,n-1);
+      return `<h3>Kelas ${e(c)} <span class="sub">(${a.length} aktivitas)</span></h3><div class="g3">${a.slice(p*8,p*8+8).map(card).join("")}</div>${n>1?`<div class="row" style="justify-content:center;margin-top:10px"><button class="g" data-c="${e(c)}" data-d="-1"${p<1?" disabled":""}>‹</button><span class="sub">Halaman ${p+1}/${n}</span><button class="g" data-c="${e(c)}" data-d="1"${p>=n-1?" disabled":""}>›</button></div>`:""}`}).join(""):'<p class="sub">Belum ada aktivitas pada tanggal ini.</p>';
+    pl.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{PG[b.dataset.c]=Math.max(0,(PG[b.dataset.c]||0)+Number(b.dataset.d));draw()});
+  }
+  pl.onclick=ev=>{if(ev.target.tagName==="IMG")lb(ev.target.src)};
+  pt.onchange=()=>{PG={};draw()};pk.onchange=()=>{PG={};draw()};draw();
+}
+
+// ---------- LOGIN / AKTIVASI ----------
+function vLogin(){
+  m.innerHTML=`<div class="card" style="max-width:420px;margin:auto"><h2>Masuk</h2><label>NIP (guru) atau email (admin/kepala sekolah)</label><input id="u" autocomplete="username"><label>Password</label><input id="p" type="password" autocomplete="current-password"><button id="go">Masuk</button><p id="er" class="err"></p><hr><a id="akt" class="lnk">Aktivasi akun guru (pertama kali)</a></div>`;
+  $("#go").onclick=async()=>{const u=$("#u").value.trim(),{data,error}=await sb.auth.signInWithPassword({email:u.includes("@")?u:u+MAIL,password:$("#p").value});
+    if(error)return $("#er").textContent="NIP/email atau password salah.";await load(data.user.id);tab=me&&me.role==="admin"?"impor":"jurnal";show()};
+  $("#akt").onclick=()=>{m.innerHTML=`<div class="card" style="max-width:420px;margin:auto"><h2>Aktivasi Akun Guru</h2><p class="sub">Minta NIP terdaftar dan kode aktivasi 6 karakter kepada admin.</p><label>NIP</label><input id="n"><label>Kode aktivasi</label><input id="k"><label>Buat password (minimal 8 karakter)</label><input id="p" type="password"><button id="ok">Aktifkan</button><p id="er" class="err"></p></div>`;
+    $("#ok").onclick=async()=>{const nip=$("#n").value.trim(),pw=$("#p").value;if(pw.length<8)return $("#er").textContent="Password minimal 8 karakter.";
+      const{data,error}=await sb.auth.signUp({email:nip+MAIL,password:pw,options:{data:{kode:$("#k").value.trim()}}});
+      if(error||!data.session)return $("#er").textContent="Aktivasi gagal: NIP atau kode salah, atau akun sudah aktif.";await load(data.user.id);tab="jurnal";show()}};
+}
+
+// ---------- DAFTAR JURNAL ----------
+async function vJurnal(){
+  const{data,error}=await sb.from("jurnal").select("*,siswa(nama,kelas),dudi(nama)").order("tgl",{ascending:false}).limit(300);
+  if(error)return m.innerHTML=`<div class="card err">${e(error.message)}</div>`;
+  m.innerHTML=`<div class="card"><h2>Daftar Jurnal (${data.length})</h2><input id="q" placeholder="Cari nama siswa atau kegiatan"><div id="ls"></div></div>`;
+  const draw=()=>{const k=$("#q").value.toLowerCase(),r=data.filter(j=>!k||(j.siswa?.nama+" "+j.kegiatan).toLowerCase().includes(k));
+    $("#ls").innerHTML=r.map(j=>`<details><summary>${tgl(j.tgl)} · ${e(j.siswa?.nama)} (${e(j.siswa?.kelas)}) · ${e(j.jenis)} ${me.role==="guru"&&j.guru_nip===me.nip?`<button class="d" data-id="${j.id}">Hapus</button>`:""}</summary>
+    <dl><dt>Kegiatan peserta didik</dt><dd>${e(j.kegiatan)}</dd><dt>Mitra DUDI</dt><dd>${e(j.dudi?.nama)}</dd><dt>Metode / Status</dt><dd>${e(j.metode)} / ${e(j.status)}</dd>${TXT.filter(t=>j.isi?.[t[0]]).map(t=>`<dt>${t[1]}</dt><dd>${e(j.isi[t[0]])}</dd>`).join("")}</dl>
+    ${(j.foto||[]).map(p=>`<img src="${e(url(p))}" alt="Dokumentasi" style="width:140px;height:140px;object-fit:cover;border-radius:6px;margin:0 6px 6px 0;cursor:zoom-in">`).join("")}</details>`).join("")||'<p class="sub">Belum ada jurnal.</p>';
+    $("#ls").querySelectorAll("[data-id]").forEach(b=>b.onclick=async ev=>{ev.preventDefault();if(confirm("Hapus catatan jurnal ini?")){await sb.from("jurnal").delete().eq("id",b.dataset.id);vJurnal()}});
+    $("#ls").querySelectorAll("img").forEach(i=>i.onclick=()=>lb(i.src))};
+  $("#q").oninput=draw;draw();
+}
+
+// ---------- ISI JURNAL (guru) ----------
+async function shrink(f){const bm=await createImageBitmap(f),s=Math.min(1,1280/Math.max(bm.width,bm.height)),c=document.createElement("canvas");c.width=Math.round(bm.width*s);c.height=Math.round(bm.height*s);c.getContext("2d").drawImage(bm,0,0,c.width,c.height);return new Promise(r=>c.toBlob(r,"image/jpeg",.8))}
+async function vIsi(){
+  const[{data:S},{data:D}]=await Promise.all([sb.from("siswa").select("nisn,nama,kelas").order("nama"),sb.from("dudi").select("id,nama").order("nama")]);DOCS=[];
+  m.innerHTML=`<div class="card"><h2>Isi Jurnal Pembimbingan</h2>${(S||[]).length?"":'<p class="err">Belum ada siswa bimbingan yang ditautkan ke Anda. Hubungi admin.</p>'}
+  <div class="row"><div><label>Tanggal</label><input type="date" id="tg" value="${new Date().toISOString().slice(0,10)}"></div><div><label>Peserta didik</label><select id="sw">${(S||[]).map(s=>`<option value="${e(s.nisn)}">${e(s.nama)} (${e(s.kelas)})</option>`).join("")}</select></div><div><label>Mitra DUDI</label><select id="dd">${(D||[]).map(d=>`<option value="${d.id}">${e(d.nama)}</option>`).join("")}</select></div></div>
+  <div class="row"><div><label>Jenis</label><select id="jn">${opt(JENIS)}</select></div><div><label>Metode</label><select id="mt">${opt(METODE)}</select></div><div><label>Status tindak lanjut</label><select id="st">${opt(STATUS)}</select></div></div>
+  <label>Kegiatan peserta didik</label><textarea id="kg"></textarea>${TXT.map(t=>`<label>${t[1]}</label><textarea id="x_${t[0]}"></textarea>`).join("")}
+  <label>Dokumentasi (foto, maksimal 3)</label><input type="file" id="fi" accept="image/*" multiple><div id="pv" class="row"></div>
+  <label><input type="checkbox" id="tp" style="width:auto"> Izinkan kegiatan dan foto ini tampil di halaman publik (pastikan sudah ada persetujuan orang tua)</label>
+  <button id="sv">Simpan jurnal</button> <span id="ms" class="sub"></span></div>`;
+  const pv=()=>{$("#pv").innerHTML=DOCS.map((d,i)=>`<span><img src="${d.u}" alt="" style="width:90px;height:90px;object-fit:cover;border-radius:6px"><button class="d" data-r="${i}">✕</button></span>`).join("")+`<span class="sub">${DOCS.length}/3</span>`;
+    $("#pv").querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>{DOCS.splice(b.dataset.r,1);pv()})};pv();
+  $("#fi").onchange=async ev=>{for(const f of ev.target.files){if(DOCS.length>=3){$("#ms").textContent="Maksimal 3 dokumentasi.";break}if(f.type.startsWith("image/")){const b=await shrink(f);DOCS.push({b,u:URL.createObjectURL(b)})}}ev.target.value="";pv()};
+  $("#sv").onclick=async()=>{const ms=$("#ms");if(!$("#sw").value)return ms.textContent="Pilih peserta didik.";ms.textContent="Menyimpan…";
+    try{const fotos=[];for(const d of DOCS){const p=`${me.nip}/${Date.now()}-${fotos.length}.jpg`,{error}=await sb.storage.from("foto").upload(p,d.b,{contentType:"image/jpeg"});if(error)throw error;fotos.push(p)}
+      const isi={};TXT.forEach(t=>isi[t[0]]=$("#x_"+t[0]).value.trim());
+      const{error}=await sb.from("jurnal").insert({tgl:$("#tg").value,nisn:$("#sw").value,guru_nip:me.nip,dudi_id:$("#dd").value||null,jenis:$("#jn").value,metode:$("#mt").value,status:$("#st").value,kegiatan:$("#kg").value.trim(),isi,foto:fotos,tampil:$("#tp").checked});
+      if(error)throw error;ms.textContent="Jurnal tersimpan.";vIsi()}catch(x){ms.textContent="Gagal: "+x.message}};
+}
+
+// ---------- GANTI PASSWORD ----------
+function vPw(){m.innerHTML=`<div class="card" style="max-width:420px"><h2>Ganti Password</h2><label>Password baru (minimal 8 karakter)</label><input id="a" type="password"><label>Ulangi password baru</label><input id="b" type="password"><button id="ok">Simpan</button> <span id="ms" class="sub"></span></div>`;
+  $("#ok").onclick=async()=>{const a=$("#a").value;if(a.length<8)return $("#ms").textContent="Minimal 8 karakter.";if(a!==$("#b").value)return $("#ms").textContent="Konfirmasi tidak sama.";
+    const{error}=await sb.auth.updateUser({password:a});$("#ms").textContent=error?"Gagal: "+error.message:"Password berhasil diubah."}}
+
+// ---------- IMPOR DATA (admin) ----------
+const MAPS={guru:{nama:/nama/,nip:/nip/,mapel:/mata pelajaran|mapel/},siswa:{nama:/nama/,nisn:/nisn|^nis/,jurusan:/jurusan/,tempat:/tempat lahir/,lahir:/tanggal lahir/,kelas:/^kelas/,gp:/pembimbing/},dudi:{nama:/mitra/,alamat:/alamat/,bidang:/bidang/,pimpinan:/pimpinan/}};
+function vImpor(){
+  const B=[["guru","1. Data Guru (impor lebih dulu)","No, Nama Guru, NIP, Mata Pelajaran"],["siswa","2. Data Peserta Didik","No, Nama Peserta Didik, NISN, Jurusan, Tempat Lahir, Tanggal Lahir, Kelas, Guru Pembimbing (nama atau NIP guru)"],["dudi","3. Data Mitra DUDI","No, Nama Mitra DUDI, Alamat, Bidang Usaha, Nama Pimpinan"]];
+  m.innerHTML=B.map(b=>`<div class="card"><h2>${b[1]}</h2><p class="sub">Kolom: ${b[2]}</p><input type="file" accept=".xlsx,.xls,.csv" data-k="${b[0]}"><p class="sub" id="s_${b[0]}"></p></div>`).join("");
+  m.querySelectorAll("[data-k]").forEach(i=>i.onchange=()=>i.files[0]&&imp(i.dataset.k,i.files[0]));
+}
+async function imp(k,f){const say=t=>$("#s_"+k).textContent=t;
+  try{const wb=XLSX.read(await f.arrayBuffer(),{type:"array"}),rw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:""}),mp=MAPS[k],ks=Object.keys(mp);
+    const hi=rw.findIndex(r=>ks.filter(x=>r.some(c=>mp[x].test(String(c).toLowerCase()))).length>=2);if(hi<0)throw new Error("judul kolom tidak ditemukan");
+    const h=rw[hi].map(c=>String(c).toLowerCase()),ix={};ks.forEach(x=>ix[x]=h.findIndex(c=>mp[x].test(c)));
+    let out=rw.slice(hi+1).map(r=>{const o={};ks.forEach(x=>o[x]=ix[x]>=0?String(r[ix[x]]).trim():"");return o}).filter(o=>o.nama&&!/^simulasi/i.test(o.nama)),conf="nip";
+    if(k==="guru")out=out.filter(o=>o.nip);
+    if(k==="dudi")conf="nama";
+    if(k==="siswa"){conf="nisn";const{data:G}=await sb.from("guru").select("nip,nama"),n=x=>String(x||"").toLowerCase().replace(/\s+/g," ").trim();
+      out=out.filter(o=>o.nisn).map(o=>{const g=(G||[]).find(g=>n(g.nip)===n(o.gp)||n(g.nama)===n(o.gp)),{gp,...r}=o;return{...r,guru_nip:g?g.nip:null}})}
+    for(let i=0;i<out.length;i+=200){const{error}=await sb.from(k).upsert(out.slice(i,i+200),{onConflict:conf});if(error)throw error;say("Mengimpor "+Math.min(i+200,out.length)+" dari "+out.length+"…")}
+    say("Selesai: "+out.length+" data diimpor."+(k==="siswa"?" "+out.filter(o=>!o.guru_nip).length+" siswa belum tertaut ke guru.":""))}
+  catch(x){say("Gagal: "+(x.message||x))}}
+
+// ---------- AKUN GURU (admin) ----------
+async function vAkun(){
+  const{data:G}=await sb.from("guru").select("*").order("nama"),{data:P}=await sb.from("profil").select("nip").eq("role","guru"),has=new Set((P||[]).map(p=>p.nip));
+  m.innerHTML=`<div class="card"><h2>Akun Guru</h2><p class="sub">Bagikan NIP dan kode aktivasi kepada guru. Guru mengaktifkan akun dan membuat password sendiri. Tombol Kode/Reset juga dipakai jika guru lupa password: akun lama dihapus, jurnal tetap aman.</p><button id="all">Buat kode untuk semua guru yang belum aktif</button>
+  <div style="overflow-x:auto"><table><tr><th>Nama</th><th>NIP</th><th>Status</th><th>Kode aktivasi</th><th></th></tr>${(G||[]).map(g=>`<tr><td>${e(g.nama)}</td><td>${e(g.nip)}</td><td>${has.has(g.nip)?"aktif":"belum aktif"}</td><td><b>${e(g.kode||"")}</b></td><td><button class="g" data-n="${e(g.nip)}">Kode / Reset</button></td></tr>`).join("")}</table></div></div>`;
+  $("#all").onclick=async()=>{await sb.rpc("kode_massal");vAkun()};
+  m.querySelectorAll("[data-n]").forEach(b=>b.onclick=async()=>{if(confirm("Buat kode baru? Jika guru sudah aktif, akunnya direset dan ia harus aktivasi ulang.")){await sb.rpc("kode_baru",{p_nip:b.dataset.n});vAkun()}});
+}
+init();
+</script></body></html>
